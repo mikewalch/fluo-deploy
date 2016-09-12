@@ -21,7 +21,7 @@ Script to help deploy a Fluo or Accumulo cluster (optionally to AWS EC2)
 import os, sys
 import shutil
 from config import MuchosConfig, HOST_VAR_DEFAULTS, PLAY_VAR_DEFAULTS
-from util import setup_boto, parse_args, exit
+from util import setup_boto, parse_args, exit_with_help
 from hosts import get_cluster_name, MuchosHosts
 from os.path import isfile, join, isdir
 import random
@@ -53,7 +53,7 @@ def get_instance(instances, instance_id):
     if instance.id == instance_id:
       return instance
 
-def launch_cluster(conn, config):
+def launch_cluster(config):
   conn = get_ec2_conn(config)
   key_name = config.get('ec2', 'key_name')
   if not key_name:
@@ -371,8 +371,8 @@ def terminate_cluster(config):
       node.terminate()
     print "Terminated instances"
 
-    if isfile(hosts_path):
-      os.remove(hosts_path)
+    if isfile(config.hosts_path):
+      os.remove(config.hosts_path)
       print "Removed hosts file at ",hosts_path
   else:
     print "Aborted termination"
@@ -388,38 +388,37 @@ def ssh_cluster(config, hosts):
   retcode = subprocess.call(ssh_command, shell=True)
   check_code(retcode, ssh_command)
 
-def main():
-
+def load_config(cluster_name, action):
   deploy_path = os.environ.get('MUCHOS')
   if not deploy_path:
     exit('ERROR - The MUCHOS env variable must be set!')
   if not os.path.isdir(deploy_path):
     exit('ERROR - Directory set by MUCHOS does not exist: '+deploy_path)
 
-  config_path = join(deploy_path, "conf/muchos.props")
-  if not isfile(config_path):
-    exit('ERROR - A config file does not exist at '+config_path)
-
   hosts_dir = join(deploy_path, "conf/hosts/")
   if not isdir(hosts_dir):
     exit('ERROR - The hosts directory does not exist at '+hosts_dir)
 
-  # parse command line args
-  retval = parse_args()
-  if not retval:
-    print "Invalid command line arguments. For help, use 'muchos -h'"
-    sys.exit(1)
-  (opts, action, args) = retval
-
-  cluster_name = opts.cluster
   if not cluster_name:
     cluster_name = get_cluster_name(hosts_dir)
-    
+ 
+  config_path = join(deploy_path, "conf/muchos.props")
+  if not isfile(config_path):
+    exit('ERROR - A config file does not exist at '+config_path)
+
   config = MuchosConfig(deploy_path, config_path, hosts_dir, cluster_name)
   config.verify_config(action)
+  return config
 
-  # Commands that don't require hosts file
+def main():
+  retval = parse_args()
+  if not retval:
+    exit_with_help("ERROR - Invalid command line arguments")
+  (opts, action, args) = retval
+
   if action in ('launch', 'status', 'terminate'):
+    # Commands that don't require hosts file
+    config = load_config(opts.cluster, action)
     if action == 'launch':
       launch_cluster(config)
     elif action == 'status':
@@ -431,30 +430,31 @@ def main():
     elif action == 'terminate':
       terminate_cluster(config)
     sys.exit(0)
+  elif action in ('sync', 'setup', 'config', 'ssh', 'wipe', 'kill'):
+    # Commands that require hosts file
+    config = load_config(opts.cluster, action)
+    if not isfile(config.hosts_path):
+      exit("ERROR - The '{0}' command requires that a hosts file exists at {1}".format(action, config.hosts_path))
+    hosts = MuchosHosts(config)
 
-  # Commands that require hosts file
-  if not isfile(config.hosts_path):
-    exit("ERROR - The '{0}' command requires that a hosts file exists at {1}".format(action, config.hosts_path))
-  hosts = MuchosHosts(config)
-
-  if action == 'sync':
-    sync_cluster(config, hosts)
-  elif action == 'setup':
-    setup_cluster(config, hosts)
-  elif action == 'config':
-    if opts.property == 'all':
-      config.print_all(hosts)
-    else:
-      config.print_property(hosts, opts.property)
-  elif action == 'ssh':
-    ssh_cluster(config, hosts)
-  elif action in ('wipe', 'kill'):
-    if action == 'wipe':
-      print "Killing all processes started by Muchos and wiping Muchos data from {0} cluster".format(config.cluster_name)
-    elif action == 'kill':
-      print "Killing all processes started by Muchos on {0} cluster".format(config.cluster_name)
-    execute_playbook(config, hosts, action + ".yml")
+    if action == 'sync':
+      sync_cluster(config, hosts)
+    elif action == 'setup':
+      setup_cluster(config, hosts)
+    elif action == 'config':
+      if opts.property == 'all':
+        config.print_all(hosts)
+      else:
+        config.print_property(hosts, opts.property)
+    elif action == 'ssh':
+      ssh_cluster(config, hosts)
+    elif action in ('wipe', 'kill'):
+      if action == 'wipe':
+        print "Killing all processes started by Muchos and wiping Muchos data from {0} cluster".format(config.cluster_name)
+      elif action == 'kill':
+        print "Killing all processes started by Muchos on {0} cluster".format(config.cluster_name)
+      execute_playbook(config, hosts, action + ".yml")
   else:
-    print 'ERROR - Unknown action:', action
+    exit_with_help('ERROR - Unknown action: ' + action)
 
 main()

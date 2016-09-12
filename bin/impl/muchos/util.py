@@ -103,6 +103,11 @@ def exit(msg):
   print msg
   sys.exit(1)
 
+def exit_with_help(msg):
+  print msg, "\n"
+  print_help()
+  sys.exit(1)
+
 def setup_boto(lib_dir):
   # Download Boto if it's not already present in lib_dir
   version = "boto-2.34.0"
@@ -128,36 +133,44 @@ def setup_boto(lib_dir):
     print "Finished downloading Boto"
   sys.path.insert(0, boto_lib_dir)
 
-def parse_args(input=None):
-  parser = OptionParser(
-            usage="muchos [options] <action>\n\n"
-            + "where <action> can be:\n"
-            + "  launch     Launch cluster in EC2\n"
-            + "  status     Check status of EC2 cluster\n"
-            + "  setup      Set up cluster\n"
-            + "  sync       Sync ansible directory on cluster proxy node\n"
-            + "  config     Print configuration for that cluster.  Requires '-p' option.  Use '-p all' for all config.\n"
-            + "  ssh        SSH to cluster proxy node\n"
-            + "  kill       Kills processes on cluster started by Muchos\n"
-            + "  wipe       Wipes cluster data and kills processes\n"
-            + "  terminate  Terminate EC2 cluster",
-            add_help_option=False)
+muchos_usage="""
+muchos [options] <action>
+
+    where <action> can be:
+      launch     Launch cluster in EC2
+      status     Check status of EC2 cluster
+      setup      Set up cluster
+      sync       Sync ansible directory on cluster proxy node
+      config     Print configuration for that cluster.  Requires '-p' option.  Use '-p all' for all config."
+      ssh        SSH to cluster proxy node"
+      kill       Kills processes on cluster started by Muchos"
+      wipe       Wipes cluster data and kills processes"
+      terminate  Terminate EC2 cluster"""
+
+def create_parser():
+  parser = OptionParser(usage=muchos_usage, add_help_option=False)
   parser.add_option("-c", "--cluster", dest="cluster", help="Specifies cluster")
   parser.add_option("-p", "--property", dest="property", help="Specifies property to print (if using 'config' action).  Set to 'all' to print every property")
   parser.add_option("-h", "--help", action="help", help="Show this help message and exit")
+  return parser
 
+def print_help():
+  parser = create_parser()
+  parser.print_help()
+
+def parse_args(input=None):
+  parser = create_parser()
   if input:
     (opts, args) = parser.parse_args(input)
   else:
     (opts, args) = parser.parse_args()
 
   if len(args) == 0:
-    print "ERROR - You must specify on action"
-    return
+    exit_with_help("ERROR - You must specify on action")
+
   action = args[0]
 
   if action == 'config' and not opts.property:
-    print "ERROR - For config action, you must set -p to a property or 'all'"
-    return
+    exit_with_help("ERROR - For config action, you must set -p to a property or 'all'")
 
   return (opts, action, args[1:])

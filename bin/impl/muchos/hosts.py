@@ -12,19 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from util import exit
+from util import exit_with_help
 import os
 from os.path import isfile, join
 
 def get_cluster_name(hosts_dir):
-    clusters = [ f for f in os.listdir(hosts_dir) if isfile(join(hosts_dir, f))]
+  clusters = [ f for f in os.listdir(hosts_dir) if isfile(join(hosts_dir, f))]
 
-    if len(clusters) == 0:
-      exit("ERROR - No clusters found in conf/hosts or specified by --cluster option")
-    elif len(clusters) == 1:
-      return clusters[0]
-    else:
-      exit("ERROR - Multiple clusters {0} found in conf/hosts/.  Please pick one using --cluster option".format(clusters))
+  if len(clusters) == 0:
+    exit_with_help("ERROR - No clusters found in conf/hosts or specified by --cluster option")
+  elif len(clusters) == 1:
+    return clusters[0]
+  else:
+    exit_with_help("ERROR - Multiple clusters {0} found in conf/hosts/.  Please pick one using --cluster option".format(clusters))
 
 class MuchosHosts:
 
