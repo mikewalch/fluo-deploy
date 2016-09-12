@@ -21,12 +21,9 @@ def test_util():
   assert get_ami('m3.large', 'us-east-1') == 'ami-6d1c2007'
   assert get_ami('m1.large', 'us-east-1') == None
 
-  hosts_dir = '../../conf/hosts'
-  assert parse_args(hosts_dir, ['launch']) == None
-  assert parse_args(hosts_dir, ['launch', 'mycluster']) == None
-  assert parse_args(hosts_dir, ['-c', 'mycluster', 'launch']) != None
+  assert parse_args(['launch']) != None
+  assert parse_args(['-c', 'mycluster', 'launch']) != None
 
-  hosts_dir = '../../conf/hosts/example'
-  assert parse_args(hosts_dir, ['setup']) != None
-  assert parse_args(hosts_dir, ['config']) == None
-  assert parse_args(hosts_dir, ['-p', 'all', 'config']) != None
+  assert parse_args(['setup']) != None
+  assert parse_args(['config']) == None
+  assert parse_args(['-p', 'all', 'config']) != None

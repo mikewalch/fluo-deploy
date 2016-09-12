@@ -17,7 +17,7 @@ Utility methods
 """
 
 import os
-from os.path import isfile, join
+from os.path import join
 import hashlib
 import sys
 from sys import stderr
@@ -128,7 +128,7 @@ def setup_boto(lib_dir):
     print "Finished downloading Boto"
   sys.path.insert(0, boto_lib_dir)
 
-def parse_args(hosts_dir, input=None):
+def parse_args(input=None):
   parser = OptionParser(
             usage="muchos [options] <action>\n\n"
             + "where <action> can be:\n"
@@ -155,22 +155,6 @@ def parse_args(hosts_dir, input=None):
     print "ERROR - You must specify on action"
     return
   action = args[0]
-
-  if action == 'launch' and not opts.cluster:
-    print "ERROR - You must specify a cluster if using launch command"
-    return
-
-  clusters = [ f for f in os.listdir(hosts_dir) if isfile(join(hosts_dir, f))]
-
-  if not opts.cluster:
-    if len(clusters) == 0:
-      print "ERROR - No clusters found in conf/hosts or specified by --cluster option"
-      return
-    elif len(clusters) == 1:
-      opts.cluster = clusters[0]
-    else:
-      print "ERROR - Multiple clusters {0} found in conf/hosts/.  Please pick one using --cluster option".format(clusters)
-      return
 
   if action == 'config' and not opts.property:
     print "ERROR - For config action, you must set -p to a property or 'all'"

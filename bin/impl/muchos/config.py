@@ -19,14 +19,14 @@ from os.path import join
 
 SERVICES = ['zookeeper', 'namenode', 'resourcemanager', 'accumulomaster', 'mesosmaster', 'worker', 'fluo', 'metrics']
 
-class DeployConfig(ConfigParser):
+class MuchosConfig(ConfigParser):
 
-  def __init__(self, deploy_path, config_path, hosts_path, cluster_name):
+  def __init__(self, deploy_path, config_path, hosts_dir, cluster_name):
     ConfigParser.__init__(self)
     self.optionxform = str
     self.deploy_path = deploy_path
     self.read(config_path)
-    self.hosts_path = hosts_path
+    self.hosts_path = join(hosts_dir, cluster_name)
     self.cluster_name = cluster_name
     self.ephemeral_root = 'ephemeral'
     self.mount_root = '/media/' + self.ephemeral_root
@@ -43,9 +43,6 @@ class DeployConfig(ConfigParser):
 
     if proxy not in self.node_d:
       exit("ERROR - The proxy (set by property proxy.hostname={0}) cannot be found in 'nodes' section of muchos.props".format(proxy))
-
-    if action != 'launch':
-      self.proxy_public_ip()
 
     if action in ['launch', 'setup']:
       self.get_image_id(self.get('ec2', 'default_instance_type'))
@@ -166,11 +163,11 @@ class DeployConfig(ConfigParser):
     retval.sort()
     return retval
 
-  def get_service_private_ips(self, service):
+  def get_service_private_ips(self, hosts, service):
     retval = []
     for (hostname, service_list) in self.node_d.items():
       if service in service_list:
-        retval.append(self.get_private_ip(hostname))
+        retval.append(hosts.get_private_ip(hostname))
     retval.sort()
     return retval
 
@@ -182,75 +179,21 @@ class DeployConfig(ConfigParser):
     retval.sort()
     return retval
 
-  def get_non_proxy(self):
-    retval = []
-    proxy_ip = self.get_private_ip(self.get('general', 'proxy_hostname'))
-    for (hostname, (private_ip, public_ip)) in self.hosts.items():
-      if private_ip != proxy_ip:
-        retval.append((private_ip, hostname))
-    retval.sort()
-    return retval
-
-  def get_private_ip_hostnames(self):
-    retval = []
-    for (hostname, (private_ip, public_ip)) in self.hosts.items():
-      retval.append((private_ip, hostname))
-    retval.sort()
-    return retval
-
-  def parse_hosts(self):
-    if not os.path.isfile(self.hosts_path):
-      exit('ERROR - A hosts file does not exist at %s' % self.hosts_path)
-
-    self.hosts = {}
-    with open(self.hosts_path) as f:
-      for line in f:
-        line = line.strip()
-        if line.startswith("#") or not line:
-          continue
-        args = line.split(' ')
-        if len(args) == 2:
-          self.hosts[args[0]] = (args[1], None)
-        elif len(args) == 3:
-          self.hosts[args[0]] = (args[1], args[2])
-        else:
-          exit('ERROR - Bad line %s in hosts %s' % (line, self.hosts_path))
-
-  def get_hosts(self):
-    if self.hosts is None:
-      self.parse_hosts()
-    return self.hosts
-
-  def get_private_ip(self, hostname):
-    return self.get_hosts()[hostname][0]
-
-  def get_public_ip(self, hostname):
-    return self.get_hosts()[hostname][1]
-
-  def proxy_public_ip(self):
-    retval = self.get_public_ip(self.get('general', 'proxy_hostname'))
-    if not retval:
-      exit("ERROR - Leader {0} does not have a public IP".format(self.get('general', 'proxy_hostname')))
-    return retval
-
-  def proxy_private_ip(self):
-    return self.get_private_ip(self.get('general', 'proxy_hostname'))
-
   def get_performance_prop(self, prop):
     profile = self.get('performance', 'profile')
     return self.get(profile, prop)
 
-  def print_all(self):
-    print 'proxy_public_ip = ', self.proxy_public_ip()
+  def print_all(self, hosts):
+    print 'proxy_public_ip = ', hosts.proxy_public_ip()
     for (name, val) in self.items('general'):
       print name, '=', val
 
     for (name, val) in self.items('ec2'):
       print name, '=', val
 
-  def print_property(self, key):
+  def print_property(self, hosts, key):
     if key == 'proxy.public.ip':
-      print self.proxy_public_ip()
+      print hosts.proxy_public_ip()
       return
     else:
       for section in self.sections():
