@@ -1,10 +1,8 @@
 # Specifies the private and optionally public IP addresses of nodes.
 # This file will be generated for you if use the 'launch' command to start EC2 instances
 # Below is expected format for each line:
-# <Hostname> <Private IP> [<Public IP>]
-leader1 10.0.0.0 23.0.0.0
-leader2 10.0.0.1
-leader3 10.0.0.2
-worker1 10.0.0.3
-worker2 10.0.0.4
-worker3 10.0.0.5
+# <Hostname> <Private IP> <Public IP>
+leader1 10.0.0.0 23.0.0.0 i-0
+leader2 10.0.0.1 None i-1
+worker1 10.0.0.2 None i-2
+worker2 10.0.0.3 None i-3

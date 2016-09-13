@@ -20,10 +20,3 @@ def test_util():
 
   assert get_ami('m3.large', 'us-east-1') == 'ami-6d1c2007'
   assert get_ami('m1.large', 'us-east-1') == None
-
-  assert parse_args(['launch']) != None
-  assert parse_args(['-c', 'mycluster', 'launch']) != None
-
-  assert parse_args(['setup']) != None
-  assert parse_args(['config']) == None
-  assert parse_args(['-p', 'all', 'config']) != None

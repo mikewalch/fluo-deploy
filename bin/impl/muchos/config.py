@@ -147,7 +147,10 @@ class MuchosConfig(ConfigParser):
   def nodes(self):
     return self.node_d
 
-  def get_node(self, hostname):
+  def get_num_nodes(self):
+    return len(self.node_d)
+
+  def get_services(self, hostname):
     return self.node_d[hostname]
 
   def has_service(self, service):
@@ -167,7 +170,8 @@ class MuchosConfig(ConfigParser):
     retval = []
     for (hostname, service_list) in self.node_d.items():
       if service in service_list:
-        retval.append(hosts.get_private_ip(hostname))
+        if hosts.has_host(hostname):
+          retval.append(hosts.get_private_ip(hostname))
     retval.sort()
     return retval
 

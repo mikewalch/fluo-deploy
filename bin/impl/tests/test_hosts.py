@@ -18,10 +18,12 @@ from muchos.config import MuchosConfig
 def test_defaults():
   c = MuchosConfig("muchos", "../../conf/muchos.props.example", "../../conf/hosts/example/", "example_cluster")
   h = MuchosHosts(c)
-  assert h.get_hosts() == {'leader2': ('10.0.0.1', None), 'leader3': ('10.0.0.2', None), 'leader1': ('10.0.0.0', '23.0.0.0'),
-                           'worker1': ('10.0.0.3', None), 'worker3': ('10.0.0.5', None), 'worker2': ('10.0.0.4', None)}
+  assert h.hosts == {'leader2': ('10.0.0.1', None, 'i-1'), 'leader1': ('10.0.0.0', '23.0.0.0', 'i-0'),
+                           'worker1': ('10.0.0.2', None, 'i-2'), 'worker2': ('10.0.0.3', None, 'i-3')}
   assert h.get_public_ip('leader1') == '23.0.0.0'
   assert h.get_private_ip('leader1') == '10.0.0.0'
+  assert h.get_instance_id('leader1') == 'i-0'
   assert h.proxy_public_ip() == "23.0.0.0"
   assert h.proxy_private_ip() == "10.0.0.0"
-  assert h.get_non_proxy() == [('10.0.0.1', 'leader2'), ('10.0.0.2', 'leader3'), ('10.0.0.3', 'worker1'), ('10.0.0.4', 'worker2'), ('10.0.0.5', 'worker3')]
+  assert h.get_hostnames() == ['worker1', 'worker2', 'leader2', 'leader1']
+  assert h.get_missing_hosts() == ['leader3', 'worker3', 'metrics']

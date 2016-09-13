@@ -26,34 +26,47 @@ def get_cluster_name(hosts_dir):
   else:
     exit_with_help("ERROR - Multiple clusters {0} found in conf/hosts/.  Please pick one using --cluster option".format(clusters))
 
+def clean(val):
+  if val.lower() == 'none':
+    return None
+  return val
+
 class MuchosHosts:
 
   def __init__(self, config):
     self.config = config
-    if not os.path.isfile(config.hosts_path):
-      exit('ERROR - A hosts file does not exist for cluster at %s' % config.hosts_path)
     self.hosts = {}
-    with open(config.hosts_path) as f:
-      for line in f:
-        line = line.strip()
-        if line.startswith("#") or not line:
-          continue
-        args = line.split(' ')
-        if len(args) == 2:
-          self.hosts[args[0]] = (args[1], None)
-        elif len(args) == 3:
-          self.hosts[args[0]] = (args[1], args[2])
-        else:
-          exit('ERROR - Bad line %s in hosts %s' % (line, config.hosts_path))
+    self.instances = {}
+    if isfile(config.hosts_path):
+      with open(config.hosts_path) as f:
+        for line in f:
+          line = line.strip()
+          if line.startswith("#") or not line:
+            continue
+          args = line.split(' ')
+          if len(args) == 4:
+            hostname = args[0]
+            instance_id = clean(args[3])
+            self.hosts[hostname] = (args[1], clean(args[2]), instance_id)
+            if instance_id:
+              self.instances[instance_id] = hostname
+          else:
+            exit('ERROR - Bad line %s in hosts %s' % (line, config.hosts_path))
 
-  def get_non_proxy(self):
-    retval = []
-    proxy_ip = self.get_private_ip(self.config.get('general', 'proxy_hostname'))
-    for (hostname, (private_ip, public_ip)) in self.hosts.items():
-      if private_ip != proxy_ip:
-        retval.append((private_ip, hostname))
-    retval.sort()
-    return retval
+  def add_host(self, hostname, private_ip, public_ip, instance_id):
+    with open(self.config.hosts_path, 'a') as hosts_file:
+      print >>hosts_file, hostname, private_ip, public_ip, instance_id
+    self.hosts[hostname] = (private_ip, public_ip, instance_id)
+    self.instances[instance_id] = hostname
+
+  def has_host(self, hostname):
+    return hostname in self.hosts
+
+  def has_instance_id(self, instance_id):
+    return instance_id in self.instances
+
+  def get_num_hosts(self):
+    return len(self.hosts)
 
   def get_private_ip_hostnames(self):
     retval = []
@@ -62,19 +75,29 @@ class MuchosHosts:
     retval.sort()
     return retval
 
-  def get_hosts(self):
-    return self.hosts
+  def get_missing_hosts(self):
+    retval = []
+    for (hostname, services) in self.config.nodes().items():
+      if hostname not in self.hosts:
+        retval.append(hostname)
+    return retval
+
+  def get_hostnames(self):
+    return self.hosts.keys()
 
   def get_private_ip(self, hostname):
-    return self.get_hosts()[hostname][0]
+    return self.hosts[hostname][0]
 
   def get_public_ip(self, hostname):
-    return self.get_hosts()[hostname][1]
+    return self.hosts[hostname][1]
+
+  def get_instance_id(self, hostname):
+    return self.hosts[hostname][2]
 
   def proxy_public_ip(self):
     retval = self.get_public_ip(self.config.get('general', 'proxy_hostname'))
     if not retval:
-      exit("ERROR - Leader {0} does not have a public IP".format(self.get('general', 'proxy_hostname')))
+      exit("ERROR - Leader {0} does not have a public IP".format(self.config.get('general', 'proxy_hostname')))
     return retval
 
   def proxy_private_ip(self):

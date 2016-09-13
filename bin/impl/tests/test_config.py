@@ -34,10 +34,10 @@ def test_defaults():
   assert c.get('ec2', 'key_name') == 'my_aws_key'
   assert c.instance_tags() == {}
   assert len(c.nodes()) == 7
-  assert c.get_node('leader1') == ['namenode', 'zookeeper', 'fluo']
-  assert c.get_node('worker1') == ['worker']
-  assert c.get_node('worker2') == ['worker']
-  assert c.get_node('worker3') == ['worker']
+  assert c.get_services('leader1') == ['namenode', 'zookeeper', 'fluo']
+  assert c.get_services('worker1') == ['worker']
+  assert c.get_services('worker2') == ['worker']
+  assert c.get_services('worker3') == ['worker']
   assert c.has_service('fluo')
   assert c.get_service_hostnames('worker') == ['worker1', 'worker2', 'worker3']
   assert c.get_service_hostnames('zookeeper') == ['leader1', 'leader2', 'leader3']
@@ -46,13 +46,14 @@ def test_defaults():
   assert c.version("fluo").startswith('1.')
   assert c.version("hadoop").startswith('2.')
   assert c.version("zookeeper").startswith('3.')
-  assert c.get_service_private_ips(h, "worker") == ['10.0.0.3', '10.0.0.4', '10.0.0.5']
+  assert c.get_service_private_ips(h, "worker") == ['10.0.0.2', '10.0.0.3']
   assert c.get('general', 'proxy_hostname') == "leader1"
   assert c.get('general', 'cluster_basedir') == "/home/centos"
   assert c.get('general', 'cluster_user') == "centos"
   assert c.get_host_services() == [('leader1', 'namenode zookeeper fluo'), ('leader2', 'resourcemanager zookeeper'), ('leader3', 'accumulomaster zookeeper'),
                                    ('metrics', 'metrics'), ('worker1', 'worker'), ('worker2', 'worker'), ('worker3', 'worker')]
   assert c.get_image_id('m3.large') == 'ami-6d1c2007'
+  assert c.get_num_nodes() == 7
   assert c.get('ec2', 'aws_access_key') == 'access_key'
   assert c.get('ec2', 'aws_secret_key') == 'secret_key'
 
@@ -62,4 +63,4 @@ def test_case_sensitive():
   assert c.has_option('ec2', 'Aws_secret_key') == False
   c.set('nodes', 'CamelCaseWorker', 'worker,fluo')
   c.init_nodes()
-  assert c.get_node('CamelCaseWorker') == ['worker', 'fluo']
+  assert c.get_services('CamelCaseWorker') == ['worker', 'fluo']

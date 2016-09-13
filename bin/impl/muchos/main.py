@@ -53,20 +53,98 @@ def get_instance(instances, instance_id):
     if instance.id == instance_id:
       return instance
 
+def verify_hosts(hosts):
+  conn = get_ec2_conn(hosts.config)
+  nodes = get_cluster(conn, hosts.config, ['running'])
+  fail = False
+  for node in nodes:
+    if not hosts.has_instance_id(node.id):
+      fail = True
+      print "ERROR - A running instance {0} was not in hosts file".format(node.id)
+
+  num_running = len(nodes)
+  num_hosts = hosts.get_num_hosts()
+  if num_running != num_hosts:
+    print "ERROR - {0} nodes are running but {1} nodes are in hosts file".format(num_running, num_hosts)
+    fail = True
+
+  if fail:
+    sys.exit(1)
+
+def launch_host(conn, config, hostname, services, key_name, security_group, subnet_id):
+  if 'worker' in services:
+    instance_type = config.get('ec2', 'worker_instance_type')
+    num_ephemeral = config.worker_num_ephemeral()
+  else:
+    instance_type = config.get('ec2', 'default_instance_type')
+    num_ephemeral = config.default_num_ephemeral()
+
+  if config.has_option('ec2', 'aws_ami'):
+    host_ami = config.get('ec2', 'aws_ami')
+  else:
+    host_ami = config.get_image_id(instance_type)
+
+  if not host_ami:
+    exit('ERROR - Image not found for instance type: '+instance_type)
+
+  bdm = BlockDeviceMapping()
+  bdm['/dev/sda1'] = BlockDeviceType(delete_on_termination=True)
+
+  for i in range(0, num_ephemeral):
+    bdt = BlockDeviceType()
+    bdt.ephemeral_name=config.ephemeral_root + str(i)
+    bdm[config.device_root + chr(ord('b') + i)] = bdt
+
+  try:
+    resv = conn.run_instances(key_name=key_name,
+                              image_id=host_ami,
+                              security_group_ids=[security_group.id],
+                              instance_type=instance_type,
+                              subnet_id=subnet_id,
+                              min_count=1,
+                              max_count=1,
+                              block_device_map=bdm)
+  except EC2ResponseError as e:
+    ami_help = """PLEASE NOTE - If you have accepted the software terms for CentOS 7 and still get an error,
+this could be due to CentOS releasing new images of CentOS 7.  When this occurs, the old images
+are no longer available to new users.  If you think this is the case, go to the CentOS 7 product
+page on AWS Marketplace at the URL below to find the latest AMI:
+
+https://aws.amazon.com/marketplace/ordering?productId=b7ee8a69-ee97-4a49-9e68-afaee216db2e
+
+On the product page, click 'Manual Launch' to find the latest AMI ID for your EC2 region.
+This should be used to set the 'aws_ami' property in your muchos.props which will override
+the default AMI IDs used by Muchos.  After setting the 'aws_ami' property, run the launch
+command again.
+
+Also, let us know that this has occured by creating an issue on the Muchos's GitHub page
+and we'll upgrade the defaults AMIs used by Muchos to be the latest CentOS images.
+"""
+    exit("ERROR - Failed to launch EC2 instance due to exception below:\n\n{0}\n\n{1}".format(e, ami_help))
+
+  if len(resv.instances) != 1:
+    exit('ERROR - Failed to start {0} node'.format(hostname))
+
+  return resv.instances[0]
+
 def launch_cluster(config):
+  hosts = MuchosHosts(config)
+  verify_hosts(hosts)
   conn = get_ec2_conn(config)
+
+  num_running = len(get_cluster(conn, config, ['running']))
+  num_req = config.get_num_nodes()
+  num_to_launch = len(hosts.get_missing_hosts())
+
+  if num_to_launch == 0 and num_running == num_req:
+    print "{0} of {1} are running for '{2}' cluster".format(num_running, num_req, config.cluster_name)
+    return
+
+  print "Launching {0} nodes as {1} of {2} nodes are running for '{3}' cluster.".format(num_to_launch, num_running, num_req, config.cluster_name)
+
   key_name = config.get('ec2', 'key_name')
   if not key_name:
     exit('ERROR - key.name is not set muchos.props')
-
-  cur_nodes = get_active_cluster(conn, config)
-  if cur_nodes:
-    exit('ERROR - There are already instances running for {0} cluster'.format(config.cluster_name))
-
-  if isfile(config.hosts_path):
-    exit("ERROR - A hosts file already exists at {0}.  Please delete before running launch again".format(config.hosts_path))
-
-  print "Launching {0} cluster".format(config.cluster_name)
 
   vpc_id = None
   if config.has_option('ec2', 'vpc_id'):
@@ -86,67 +164,12 @@ def launch_cluster(config):
       security_group.authorize(ip_protocol='udp', from_port=0, to_port=65535, src_group=security_group)
     security_group.authorize('tcp', 22, 22, '0.0.0.0/0')
 
-  instance_d = {}
-  for (hostname, services) in config.nodes().items():
-
-    if 'worker' in services:
-      instance_type = config.get('ec2', 'worker_instance_type')
-      num_ephemeral = config.worker_num_ephemeral()
-    else:
-      instance_type = config.get('ec2', 'default_instance_type')
-      num_ephemeral = config.default_num_ephemeral()
-
-    if config.has_option('ec2', 'aws_ami'):
-      host_ami = config.get('ec2', 'aws_ami')
-    else:
-      host_ami = config.get_image_id(instance_type)
-
-    if not host_ami:
-      exit('ERROR - Image not found for instance type: '+instance_type)
-
-    bdm = BlockDeviceMapping()
-    bdm['/dev/sda1'] = BlockDeviceType(delete_on_termination=True)
-
-    for i in range(0, num_ephemeral):
-      bdt = BlockDeviceType()
-      bdt.ephemeral_name=config.ephemeral_root + str(i)
-      bdm[config.device_root + chr(ord('b') + i)] = bdt
-
-    try:
-      resv = conn.run_instances(key_name=key_name,
-                                image_id=host_ami,
-                                security_group_ids=[security_group.id],
-                                instance_type=instance_type,
-                                subnet_id=subnet_id,
-                                min_count=1,
-                                max_count=1,
-                                block_device_map=bdm)
-    except EC2ResponseError as e:
-      ami_help = """PLEASE NOTE - If you have accepted the software terms for CentOS 7 and still get an error,
-this could be due to CentOS releasing new images of CentOS 7.  When this occurs, the old images
-are no longer available to new users.  If you think this is the case, go to the CentOS 7 product
-page on AWS Marketplace at the URL below to find the latest AMI:
-
-https://aws.amazon.com/marketplace/ordering?productId=b7ee8a69-ee97-4a49-9e68-afaee216db2e
-
-On the product page, click 'Manual Launch' to find the latest AMI ID for your EC2 region.
-This should be used to set the 'aws_ami' property in your muchos.props which will override
-the default AMI IDs used by Muchos.  After setting the 'aws_ami' property, run the launch
-command again.
-
-Also, let us know that this has occured by creating an issue on the Muchos's GitHub page
-and we'll upgrade the defaults AMIs used by Muchos to be the latest CentOS images.
-"""
-      exit("ERROR - Failed to launch EC2 instance due to exception below:\n\n{0}\n\n{1}".format(e, ami_help))
-
-    if len(resv.instances) != 1:
-      exit('ERROR - Failed to start {0} node'.format(hostname))
-
-    instance = resv.instances[0]
-
-    instance_d[hostname] = instance.id
-    print 'Launching {0} node using {1}'.format(hostname, host_ami)
-
+  for (hostname) in hosts.get_missing_hosts():
+    sys.stdout.write('Launching {0} node...'.format(hostname))
+    services = config.get_services(hostname)
+    instance = launch_host(conn, config, hostname, services, key_name, security_group, subnet_id)
+    hosts.add_host(hostname, instance.private_ip_address, instance.ip_address, instance.id)
+    sys.stdout.write('DONE. instance_id {1}\n'.format(hostname, instance.id))
 
   while True:
     time.sleep(5)
@@ -156,23 +179,18 @@ and we'll upgrade the defaults AMIs used by Muchos to be the latest CentOS image
     num_expected = len(config.nodes())
 
     if num_actual == num_expected:
-      # Tag instances and create hosts file
+      # Tag instances with proper name and create hosts file
       with open(config.hosts_path, 'w') as hosts_file:
         for (hostname, services) in config.nodes().items():
           instance = get_instance(nodes, instance_d[hostname])
-
+          print >>hosts_file, hostname, instance.private_ip_address, instance.ip_address, instance.id
           instance.add_tag(key='Name', value='{cn}-{id}'.format(cn=config.cluster_name, id=hostname))
           for tkey, tval in config.instance_tags().iteritems():
             instance.add_tag(key=tkey, value=tval)
-          public_ip = ''
-          if instance.ip_address:
-            public_ip = instance.ip_address
-          private_ip = instance.private_ip_address
-          print >>hosts_file, hostname, private_ip, public_ip
-      print "All {0} nodes have started.  Created hosts file at {1}".format(num_actual, config.hosts_path)
+      print "All {0} nodes are running.  Created hosts file at {1}".format(num_actual, config.hosts_path)
       break
     else:
-      print "{0} of {1} nodes have started.  Waiting another 5 sec..".format(num_actual, num_expected)
+      print "{0} of {1} nodes are running.  Waiting another 5 sec..".format(num_actual, num_expected)
 
 def get_cluster(conn, config, states):
   reservations = conn.get_all_reservations()
@@ -373,7 +391,7 @@ def terminate_cluster(config):
 
     if isfile(config.hosts_path):
       os.remove(config.hosts_path)
-      print "Removed hosts file at ",hosts_path
+      print "Removed hosts file at ",config.hosts_path
   else:
     print "Aborted termination"
 
