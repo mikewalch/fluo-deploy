@@ -279,6 +279,8 @@ def sync_cluster(config):
       print >>site_file, "- include: metrics.yml"
     if config.has_service('fluo'):
       print >>site_file, "- include: fluo.yml"
+    if config.has_service("kubernetesmaster"):
+      print >>site_file, "- include: kubernetes.yml"
 
   ansible_conf = join(config.deploy_path, "ansible/conf")
   with open(join(ansible_conf, "hosts"), 'w') as hosts_file:
@@ -288,7 +290,8 @@ def sync_cluster(config):
     print >>hosts_file, "\n[resourcemanager]\n{0}".format(config.get_service_hostnames("resourcemanager")[0])
     if config.has_service("mesosmaster"):
       print >>hosts_file, "\n[mesosmaster]\n{0}".format(config.get_service_hostnames("mesosmaster")[0])
-
+    if config.has_service("kubernetesmaster"):
+      print >>hosts_file, "\n[kubernetesmaster]\n{0}".format(config.get_service_hostnames("kubernetesmaster")[0])
     if config.has_service("metrics"):
       print >>hosts_file, "\n[metrics]\n{0}".format(config.get_service_hostnames("metrics")[0])
 

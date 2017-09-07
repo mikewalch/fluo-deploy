@@ -1,0 +1,13 @@
+- name: "configure kubernetes repo"
+  copy: src=kubernetes.repo dest=/etc/yum.repos.d/kubernetes.repo
+- name: "install kubelet & kubeadm"
+  command: yum install -y kubelet kubeadm
+- name: "install docker"
+  yum: name=docker state=present
+- name: "disble selinux to allow containers to access the host filesystem"
+  command: setenforce 0
+- name: "start docker & kubelet"
+  service: name={{ item }} state=started
+  with_items:
+    - docker
+    - kubelet
